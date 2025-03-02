@@ -17,7 +17,7 @@ Built for Up Bank users who love Actual Budget but hate manual imports.
 ## Roadmap
 
 - [x] **Docker**: Containerised setup.
-- [ ] **2Up & Up Compatibility**: Allow for multiple Up accounts including 2Up.
+- [ ] **2Up Compatibility**: Allow for multiple Up accounts including 2Up.
 - [ ] **Web UI**: Browser-based setup for non-technical users.
 - [ ] **Settings**: Allow users to easily change settings like sync frequency.
 - [ ] **Stock Portfolio Import**: Automatic imports of your stock portfolio as an off-budget account.
