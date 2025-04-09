@@ -238,6 +238,7 @@ async function uploadTransactions(accounts) {
                 date: new Date(transaction.attributes.settledAt || transaction.attributes.createdAt).toISOString().split('T')[0],
                 amount: Math.round(transaction.attributes.amount.value * 100),
                 payee_name: transaction.attributes.description || 'Unknown',
+                cleared: transaction.attributes.status === 'SETTLED',
                 imported_id: `${transaction.id}`,
               };
 
@@ -247,6 +248,7 @@ async function uploadTransactions(accounts) {
                   date: formattedTransaction.date,
                   amount: -Math.round(Math.abs(roundUpAmount) * 100),
                   payee_name: "Round Up Transfer",
+                  cleared: transaction.attributes.status === 'SETTLED',
                   imported_id: `ROUNDUP_${transaction.id}`,
                 };
 
@@ -490,6 +492,7 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
                 date: new Date(transaction.attributes.settledAt || transaction.attributes.createdAt).toISOString().split('T')[0],
                 amount: Math.round(transaction.attributes.amount.value * 100),
                 payee_name: transaction.attributes.description || 'Unknown',
+                cleared: transaction.attributes.status === 'SETTLED',
                 imported_id: `${transaction.id}`,
               };
 
@@ -499,6 +502,7 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
                   date: formattedTransaction.date,
                   amount: -Math.round(Math.abs(roundUpAmount) * 100),
                   payee_name: "Round Up Transfer",
+                  cleared: transaction.attributes.status === 'SETTLED',
                   imported_id: `ROUNDUP_${transaction.id}`,
                 };
 
