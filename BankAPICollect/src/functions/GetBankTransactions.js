@@ -399,6 +399,9 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
             return acc;
         }, {});
 
+        // Fetch payees to calculate transfer payees
+        const payees = await api.getPayees();
+
         // Process transactions for each account
         for (const [upAccountId, accountData] of Object.entries(transactionsByAccount)) {
             const upAccountName = accountData.accountName;
