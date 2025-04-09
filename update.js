@@ -21,14 +21,18 @@ async function GetAccounts() {
 }
 
 async function startup() {
-  try {
-    await GetAccounts();
-    const connection = await BankAPILib.AuthenticateUp();
-    const accounts = connection.data.data;
+  if (process.env.FULL_SYNC) {
+    try {
+      await GetAccounts();
+      const connection = await BankAPILib.AuthenticateUp();
+      const accounts = connection.data.data;
 
-    await BankAPILib.uploadTransactions(accounts);
-  } catch (error) {
-    console.error('Error:', error);
+      await BankAPILib.uploadTransactions(accounts);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  } else {
+    console.log("Skipping full sync as FULL_SYNC environment variable is set");
   }
 }
 
