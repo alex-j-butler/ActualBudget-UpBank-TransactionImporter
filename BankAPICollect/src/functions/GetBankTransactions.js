@@ -175,8 +175,63 @@ async function uploadTransactions(accounts) {
             // Fetch transactions for this specific account
             const transactions = await fetchTransactionsForAccount(upAccountId, accessToken);
 
+            // Fetch payees to calculate transfer payees
+            const payees = await api.getPayees();
+
             const formattedTransactions = transactions.flatMap(transaction => { // Use flatMap
               const roundUpAmount = transaction.attributes.roundUp ? transaction.attributes.roundUp.amount.value : 0;
+
+              // Handle transfers correctly in Actual Budget.
+              if (transaction.relationships.transferAccount.data !== null) {
+                let upTransferAccountId = transaction.relationships.transferAccount.data.id;
+
+                // Check for explicit mapping of the transfer account
+                let actualBudgetTransferAccountId = accountMapping[upTransferAccountId];
+
+                if (actualBudgetTransferAccountId) {
+                    // We have an account mapping for both sides of the transfer.
+                    // We will ignore transfers with negative amounts (ie. ignore the losing side of the transfer)
+                    // and process the gaining side of the transfer.
+                    //
+                    // We ignore negative amounts as roundups on the positive side are shown as transfers,
+                    // and the other side of the transfer shows as a normal transaction with additional attributes. 
+                    //
+                    // Actual will automatically create the other side of the transfer.
+                    if (transaction.attributes.amount.value > 0) {
+                        // First, get the 'transfer payee' for the other side of the transfer.
+                        let transferPayee = payees.find(p => p.transfer_acct === actualBudgetTransferAccountId);
+                        if (transferPayee) {
+                            const formattedTransaction = {
+                                account: actualBudgetAccountId,
+                                date: new Date(transaction.attributes.settledAt || transaction.attributes.createdAt).toISOString().split('T')[0],
+                                amount: Math.round(transaction.attributes.amount.value * 100),
+                                payee: transferPayee.id,
+                                imported_id: `${transaction.id}`,
+                            };
+                            
+                            // If this transaction is a round up, add to the notes.
+                            if (transaction.attributes.description === 'Round Up') {
+                                formattedTransaction.notes = "Round Up";
+                                formattedTransaction.imported_id = `ROUNDUP_${transaction.id}`;
+                            }
+                            return [formattedTransaction];
+                        } else {
+                            // Could not find the transfer payee for the Actual account.
+                            // Log a warning and continue the transaction as normal.
+                            console.warn(`No transfer payee found for Actual Budget Account: ID: ${actualBudgetTransferAccountId}`);
+                        }
+                    } else {
+                        // console.log(`Ignoring negative transfer from ${upAccountName}: $${transaction.attributes.amount.value}`);
+                        return [];
+                    }
+
+                } else {
+                    // No mapping for account. Continue the transaction as normal.
+                    // This prevents missing transfer when one account (receiving or depositing account)
+                    // is not mapped to an Actual account.
+                    console.warn(`No account mapping found for Up Transfer Account: ID: ${upTransferAccountId}`);
+                }
+              }
 
               const formattedTransaction = {
                 account: actualBudgetAccountId,
@@ -184,6 +239,7 @@ async function uploadTransactions(accounts) {
                 amount: Math.round(transaction.attributes.amount.value * 100),
                 payee_name: transaction.attributes.description || 'Unknown',
                 cleared: transaction.attributes.status === 'SETTLED',
+                imported_id: `${transaction.id}`,
               };
 
               if (roundUpAmount !== 0) {
@@ -193,8 +249,11 @@ async function uploadTransactions(accounts) {
                   amount: -Math.round(Math.abs(roundUpAmount) * 100),
                   payee_name: "Round Up Transfer",
                   cleared: transaction.attributes.status === 'SETTLED',
+                  imported_id: `ROUNDUP_${transaction.id}`,
                 };
-                return [formattedTransaction, roundUpTransaction]; // Return an array
+
+                // No roundups! We handle them in the transfers section.
+                return [formattedTransaction];//, roundUpTransaction]; // Return an array
               } else {
                 return [formattedTransaction]; // Return an array with a single item
               }
@@ -342,6 +401,9 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
             return acc;
         }, {});
 
+        // Fetch payees to calculate transfer payees
+        const payees = await api.getPayees();
+
         // Process transactions for each account
         for (const [upAccountId, accountData] of Object.entries(transactionsByAccount)) {
             const upAccountName = accountData.accountName;
@@ -373,12 +435,65 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
             const formattedTransactions = transactions.flatMap(transaction => { // Use flatMap
               const roundUpAmount = transaction.attributes.roundUp ? transaction.attributes.roundUp.amount.value : 0;
 
+              // Handle transfers correctly in Actual Budget.
+              if (transaction.relationships.transferAccount.data !== null) {
+                let upTransferAccountId = transaction.relationships.transferAccount.data.id;
+
+                // Check for explicit mapping of the transfer account
+                let actualBudgetTransferAccountId = accountMapping[upTransferAccountId];
+
+                if (actualBudgetTransferAccountId) {
+                    // We have an account mapping for both sides of the transfer.
+                    // We will ignore transfers with negative amounts (ie. ignore the losing side of the transfer)
+                    // and process the gaining side of the transfer.
+                    //
+                    // We ignore negative amounts as roundups on the positive side are shown as transfers,
+                    // and the other side of the transfer shows as a normal transaction with additional attributes. 
+                    //
+                    // Actual will automatically create the other side of the transfer.
+                    if (transaction.attributes.amount.value > 0) {
+                        // First, get the 'transfer payee' for the other side of the transfer.
+                        let transferPayee = payees.find(p => p.transfer_acct === actualBudgetTransferAccountId);
+                        if (transferPayee) {
+                            const formattedTransaction = {
+                                account: actualBudgetAccountId,
+                                date: new Date(transaction.attributes.settledAt || transaction.attributes.createdAt).toISOString().split('T')[0],
+                                amount: Math.round(transaction.attributes.amount.value * 100),
+                                payee: transferPayee.id,
+                                imported_id: `${transaction.id}`,
+                            };
+                            
+                            // If this transaction is a round up, add to the notes.
+                            if (transaction.attributes.description === 'Round Up') {
+                                formattedTransaction.notes = "Round Up";
+                                formattedTransaction.imported_id = `ROUNDUP_${transaction.id}`;
+                            }
+                            return [formattedTransaction];
+                        } else {
+                            // Could not find the transfer payee for the Actual account.
+                            // Log a warning and continue the transaction as normal.
+                            console.warn(`No transfer payee found for Actual Budget Account: ID: ${actualBudgetTransferAccountId}`);
+                        }
+                    } else {
+                        // console.log(`Ignoring negative transfer from ${upAccountName}: $${transaction.attributes.amount.value}`);
+                        return [];
+                    }
+
+                } else {
+                    // No mapping for account. Continue the transaction as normal.
+                    // This prevents missing transfer when one account (receiving or depositing account)
+                    // is not mapped to an Actual account.
+                    console.warn(`No account mapping found for Up Transfer Account: ID: ${upTransferAccountId}`);
+                }
+              }
+
               const formattedTransaction = {
                 account: actualBudgetAccountId,
                 date: new Date(transaction.attributes.settledAt || transaction.attributes.createdAt).toISOString().split('T')[0],
                 amount: Math.round(transaction.attributes.amount.value * 100),
                 payee_name: transaction.attributes.description || 'Unknown',
                 cleared: transaction.attributes.status === 'SETTLED',
+                imported_id: `${transaction.id}`,
               };
 
               if (roundUpAmount !== 0) {
@@ -388,8 +503,11 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
                   amount: -Math.round(Math.abs(roundUpAmount) * 100),
                   payee_name: "Round Up Transfer",
                   cleared: transaction.attributes.status === 'SETTLED',
+                  imported_id: `ROUNDUP_${transaction.id}`,
                 };
-                return [formattedTransaction, roundUpTransaction]; // Return an array
+
+                // No roundups! We handle them in the transfers section.
+                return [formattedTransaction];//, roundUpTransaction]; // Return an array
               } else {
                 return [formattedTransaction]; // Return an array with a single item
               }
@@ -399,7 +517,7 @@ async function uploadWeeklyTransactions(weeklyTransactions) {
             if (formattedTransactions.length > 0) {
                 try {
                     const result = await api.importTransactions(actualBudgetAccountId, formattedTransactions);
-                    //console.log(`Uploaded ${formattedTransactions.length} weekly transactions for ${upAccountName}`);
+                    console.log(`Uploaded ${formattedTransactions.length} weekly transactions for ${upAccountName}`);
                 } catch (importError) {
                     console.error(`Error importing weekly transactions for ${upAccountName}:`, importError);
                 }
